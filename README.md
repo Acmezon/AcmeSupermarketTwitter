@@ -1,2 +1,2 @@
-# AcmeSupermarketTwitter
-Plataforma de escucha a twitter y filtrado para presencia de productos
+# spark-streaming-si
+Práctica de Spark Streaming de SI
