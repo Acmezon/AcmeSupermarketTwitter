@@ -126,20 +126,5 @@
 			<version>3.1.0</version>
 			<type>pom</type>
 		</dependency>
-		<dependency>
-			<groupId>org.apache.spark</groupId>
-			<artifactId>spark-hive_2.10</artifactId>
-			<version>1.6.0</version>
-		</dependency>
-		<dependency>
-			<groupId>com.stratio.datasource</groupId>
-			<artifactId>spark-mongodb_2.10</artifactId>
-			<version>0.10.3</version>
-		</dependency>
-		<dependency>
-			<groupId>org.apache.spark</groupId>
-			<artifactId>spark-sql_2.10</artifactId>
-			<version>1.6.0</version>
-		</dependency>
 	</dependencies>
 </project>

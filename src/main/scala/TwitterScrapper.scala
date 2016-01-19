@@ -10,7 +10,6 @@ import org.apache.spark.streaming.twitter.TwitterUtils
 import com.mongodb.casbah.MongoClient
 import com.mongodb.casbah.commons.MongoDBObject
 import java.util.logging.Logger
-import org.apache.derby.iapi.reference.ClassName
 import java.util.logging.Level
 
 object TwitterScrapper {  
