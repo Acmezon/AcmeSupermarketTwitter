@@ -51,10 +51,10 @@ object TwitterScrapper {
         var mongoProductColl = mongoProductConnection("Acme-Supermarket")("products");
         
         val mongoBrandDataConnection = MongoClient();
-        var mongoBrandDataColl = mongoBrandDataConnection("Acme-Supermarket")("SocialMediaBrandData");
+        var mongoBrandDataColl = mongoBrandDataConnection("Acme-Supermarket")("social_media_brand_data");
         
         val mongoProductDataConnection = MongoClient();
-        var mongoProductDataColl = mongoBrandDataConnection("Acme-Supermarket")("SocialMediaProductData");
+        var mongoProductDataColl = mongoProductDataConnection("Acme-Supermarket")("social_media_product_data");
         
         val brandContained = status._1.toLowerCase().contains("amazon");
         val productContained = status._1.toLowerCase().contains("amazon dash");
