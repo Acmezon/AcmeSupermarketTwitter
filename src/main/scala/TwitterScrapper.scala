@@ -1,5 +1,3 @@
-
-
 import java.text.SimpleDateFormat
 import java.util.Date
 import org.apache.spark.SparkConf
@@ -9,18 +7,36 @@ import org.apache.spark.streaming.StreamingContextState
 import org.apache.spark.streaming.twitter.TwitterUtils
 import com.mongodb.casbah.MongoClient
 import com.mongodb.casbah.commons.MongoDBObject
-import java.util.logging.Logger
-import java.util.logging.Level
+import com.typesafe.config.ConfigFactory
+import java.io.FileOutputStream
+import java.io.File
+import java.io.PrintWriter
 
 object TwitterScrapper {  
-  def log(message: String, level: String) : String = {
+  def log(message: String, level: String) = {
     val formatter = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
     val moment = formatter.format(new Date())
     
-    return moment + " " + level + ": " + message;
+    val line = moment + " " + level + ": " + message;
+    
+    val f = new File("logs/social_media.log");
+    
+    var writer: PrintWriter = null;
+    if ( f.exists() && !f.isDirectory() ) {
+        writer = new PrintWriter(new FileOutputStream(new File("logs/social_media.log"), true));
+        writer.append(line + "\n");
+        writer.close();
+    }
+    else {
+        f.getParentFile().mkdirs();
+        writer = new PrintWriter("logs/social_media.log");
+        writer.println(line);
+        writer.close();
+    }
   }
   
   def main(args: Array[String]) {    
+    val config =  ConfigFactory.parseFile(new File("./application.conf"))
     // Configure Twitter credentials
     TwitterCredentials.configureTwitterCredentials()
 
@@ -43,7 +59,6 @@ object TwitterScrapper {
      
     statuses.foreachRDD( statusRDD => {
       statusRDD.foreach( status => {
-        var log = Logger.getLogger("Acme-Supermarket Twitter Logger");
         var stopWords = new StopWords();
         //println(status._1);
         
@@ -56,8 +71,8 @@ object TwitterScrapper {
         val mongoProductDataConnection = MongoClient();
         var mongoProductDataColl = mongoProductDataConnection("Acme-Supermarket")("social_media_product_data");
         
-        val brandContained = status._1.toLowerCase().contains("amazon");
-        val productContained = status._1.toLowerCase().contains("amazon dash");
+        val brandContained = status._1.toLowerCase().contains(config.getString("app.brand-name"));
+        val productContained = status._1.toLowerCase().contains(config.getString("app.product-name"));
         
         if(brandContained || productContained) {
           //Introducir una entrada en la tabla de SocialMediaBrandData con el texto y la fecha
@@ -68,8 +83,7 @@ object TwitterScrapper {
           
           mongoBrandDataColl += brandOcurrence;
           
-          log.log(Level.FINE, "Ocurrencia de marca encontrada");
-            println("Ocurrencia de marca");
+          log("Ocurrencia de marca", "INFO");
         }
         
         //Por cada producto, mirar si el tweet contiene al nombre del mismo y, en caso afirmativo, 
@@ -92,8 +106,7 @@ object TwitterScrapper {
             );
             
             mongoProductDataColl += productOcurrence;
-            log.log(Level.FINE, "Ocurrencia de producto");
-            println("Ocurrencia de producto");
+            log("Ocurrencia de producto", "INFO");
           }
         }}
         
@@ -107,7 +120,6 @@ object TwitterScrapper {
         mongoProductDataConnection.underlying.close();
         mongoProductDataColl = null;
         
-        log = null;
         stopWords = null;
       });
     });
