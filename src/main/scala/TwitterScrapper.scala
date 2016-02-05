@@ -11,6 +11,7 @@ import com.typesafe.config.ConfigFactory
 import java.io.FileOutputStream
 import java.io.File
 import java.io.PrintWriter
+import scala.collection.mutable.{Map}
 
 object TwitterScrapper {  
   def log(message: String, level: String) = {
@@ -71,17 +72,75 @@ object TwitterScrapper {
       
       val curr_avg = brandSum / brandCount
       
-      val increaseRate = curr_avg - prev_avg;
+      val increaseRate = (curr_avg - prev_avg) * 100;
       
       val mongoBrandRuleConnection = MongoClient();
       var mongoBrandRuleColl = mongoBrandRuleConnection("Acme-Supermarket")("social_media_rules");
       
-      var query = MongoDBObject("_type" -> "BrandRule", "increaseRate" -> MongoDBObject( "$gte" -> increaseRate));
-      var fields = MongoDBObject("_id" -> 1);
+      val query = MongoDBObject("_type" -> "BrandRule", "increaseRate" -> MongoDBObject( "$le" -> increaseRate));
+      val fields = MongoDBObject("_id" -> 1);
+      val brandRules = mongoBrandRuleColl.find(query, fields);
+      
+      brandRules.foreach { rule => 
+        val mongoBrandNotificationConnection = MongoClient();
+        var mongoBrandNotificationColl = mongoBrandNotificationConnection("Acme-Supermarket")("social_media_notifications");
+      
+        val brandNotification = MongoDBObject(
+          "_type" -> "BrandNotification",
+          "percentageExceede" -> increaseRate,
+          "brand_rule_id" -> rule.get("_id").toString(),
+          "moment" -> new Date()
+        )
+        
+        mongoBrandNotificationColl += brandNotification;
+        
+        mongoBrandNotificationConnection.underlying.close();
+        mongoBrandNotificationColl = null;
+      }
       
       mongoBrandRuleConnection.underlying.close();
       mongoBrandRuleColl = null;
     })
+    
+    brandStatuses.foreachRDD( brandRDD => {
+      brandRDD.foreach(brand => {
+        val mongoBrandDataConnection = MongoClient();
+        var mongoBrandDataColl = mongoBrandDataConnection("Acme-Supermarket")("social_media_brand_data");
+        
+        val brandOcurrence = MongoDBObject(
+            "date" -> new Date(),
+            "description" -> brand._1
+        );
+        
+        mongoBrandDataColl += brandOcurrence;
+        
+        mongoBrandDataConnection.underlying.close();
+        mongoBrandDataColl = null;
+        
+        log("Ocurrencia de marca", "INFO");
+      })
+    });
+    
+    var product_data = Map[Integer, Map[String, Any]]();
+    
+    val mongoProductConnection = MongoClient();
+    var mongoProductColl = mongoProductConnection("Acme-Supermarket")("products");
+    
+    //Por cada producto filtrar los tweets que hablan de él y meter ocurrencias y notificaciones        
+    val query = MongoDBObject.empty;
+    val fields = MongoDBObject("_id" -> 1, "name" -> 1);
+    val products = mongoProductColl.find(query, fields);
+    
+    val stopWords = new StopWords();
+    
+    products.foreach { product => 
+        val p_id = product.get("_id");
+        var p_name = product.get("name").toString().toLowerCase().split(" ");
+        
+        p_name = stopWords.filter_stopwords(p_name, Languages.Any);
+        
+        val productStatuses = statuses.filter(status => p_name.exists(word => status._1.matches("\\b" + word + "\\b")) )
+    }
     
     statuses.foreachRDD( statusRDD => {
       statusRDD.foreach( status => {
