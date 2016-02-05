@@ -33,6 +33,8 @@ object TwitterScrapper {
         writer.println(line);
         writer.close();
     }
+    
+    print(message);
   }
   
   def main(args: Array[String]) {    
@@ -57,6 +59,30 @@ object TwitterScrapper {
     var statuses = tweets.map { status => (status.getText, status.getCreatedAt, status.getLang) }
     statuses = statuses.filter { status => status._3 == "es" || status._3 == "en" }
      
+    val brandStatuses = statuses.filter { status =>  status._1.toLowerCase().contains(config.getString("app.brand-name")) || status._1.toLowerCase().contains(config.getString("app.product-name"))}
+    
+    var brandSum = 0L
+    var brandCount = 0.0
+    
+    brandStatuses.count().foreachRDD((rdd, time) => {
+      val prev_avg = if(brandCount == 0.0) 0.0 else brandSum / brandCount;
+      brandSum += rdd.first()
+      brandCount += 1.0
+      
+      val curr_avg = brandSum / brandCount
+      
+      val increaseRate = curr_avg - prev_avg;
+      
+      val mongoBrandRuleConnection = MongoClient();
+      var mongoBrandRuleColl = mongoBrandRuleConnection("Acme-Supermarket")("social_media_rules");
+      
+      var query = MongoDBObject("_type" -> "BrandRule", "increaseRate" -> MongoDBObject( "$gte" -> increaseRate));
+      var fields = MongoDBObject("_id" -> 1);
+      
+      mongoBrandRuleConnection.underlying.close();
+      mongoBrandRuleColl = null;
+    })
+    
     statuses.foreachRDD( statusRDD => {
       statusRDD.foreach( status => {
         var stopWords = new StopWords();
