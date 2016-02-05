@@ -139,7 +139,11 @@ object TwitterScrapper {
         
         p_name = stopWords.filter_stopwords(p_name, Languages.Any);
         
-        val productStatuses = statuses.filter(status => p_name.exists(word => status._1.matches("\\b" + word + "\\b")) )
+        val productStatuses = statuses.filter(status => p_name.exists(word => status._1.matches("\\b" + word.replaceAll("[~!@#$^%&*\\(\\)_+={}\\[\\]|;:\"'<,>.?`/\\\\-]", "") + "\\b")) )
+        
+        productStatuses.count().foreachRDD((rdd, time) => {
+          
+        });
     }
     
     statuses.foreachRDD( statusRDD => {
