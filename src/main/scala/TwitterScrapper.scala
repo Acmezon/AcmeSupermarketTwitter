@@ -7,6 +7,7 @@ import org.apache.spark.streaming.StreamingContextState
 import org.apache.spark.streaming.twitter.TwitterUtils
 import com.mongodb.casbah.MongoClient
 import com.mongodb.casbah.commons.MongoDBObject
+import com.mongodb.casbah.Imports._
 import com.typesafe.config.ConfigFactory
 import java.io.FileOutputStream
 import java.io.File
@@ -35,7 +36,6 @@ object TwitterScrapper {
         writer.close();
     }
     
-    print(message);
   }
   
   def main(args: Array[String]) {    
@@ -68,7 +68,7 @@ object TwitterScrapper {
       val mongoBrandRuleConnection = MongoClient();
       var mongoBrandRuleColl = mongoBrandRuleConnection("Acme-Supermarket")("social_media_rules");
       
-      val query = MongoDBObject("_type" -> "BrandRule", "increaseRate" -> MongoDBObject( "$le" -> increaseRate));
+      val query = MongoDBObject("_type" -> "BrandRule", "increaseRate" -> MongoDBObject( "$lte" -> increaseRate));
       val fields = MongoDBObject("_id" -> 1);
       val brandRules = mongoBrandRuleColl.find(query, fields);
       
@@ -116,23 +116,29 @@ object TwitterScrapper {
     
     val product_data = Map[Integer, Map[String, Any]]();
     
+    val mongoProductRuleConnection = MongoClient();
+    var mongoProductRuleColl = mongoProductRuleConnection("Acme-Supermarket")("social_media_rules");
+    
+    val query = MongoDBObject("_type" -> "ProductRule");
+    val fields = MongoDBObject("_id" -> 1, "product_id" -> 1);
+    val productRules = mongoProductRuleColl.find(query, fields);
+    
+    val product_ids = productRules.map { rule => Integer.parseInt(rule.get("product_id").toString()) }.toList
+   
     val mongoProductConnection = MongoClient();
     var mongoProductColl = mongoProductConnection("Acme-Supermarket")("products");
-    
-    //Por cada producto filtrar los tweets que hablan de él y meter ocurrencias y notificaciones        
-    val query = MongoDBObject.empty;
-    val fields = MongoDBObject("_id" -> 1, "name" -> 1);
-    val products = mongoProductColl.find(query, fields);
-    
+            
+    val ruled_products = mongoProductColl.find("_id" $in product_ids);
+   
     val stopWords = new StopWords();
     
-    products.foreach { product => 
+    ruled_products.foreach { product => 
       val p_id = Integer.parseInt(product.get("_id").toString());
       var p_name = product.get("name").toString().toLowerCase().split(" ");
       
       p_name = stopWords.filter_stopwords(p_name, Languages.Any);
       
-      val productStatuses = statuses.filter(status => p_name.exists(word => status._1.matches("\\b" + word.replaceAll("[~!@#$^%&*\\(\\)_+={}\\[\\]|;:\"'<,>.?`/\\\\-]", "") + "\\b")) )
+      val productStatuses = statuses.filter(status => p_name.exists(word => status._1.matches(".*\\b" + word.replaceAll("[~!@#$^%&*\\(\\)_+={}\\[\\]|;:\"'<,>.?`/\\\\-]", "") + "\\b.*")) )
       
       productStatuses.count().foreachRDD((rdd, time) => {
         var prev_avg = 0.0;
@@ -172,7 +178,7 @@ object TwitterScrapper {
         val mongoProductRuleConnection = MongoClient();
         var mongoProductRuleColl = mongoProductRuleConnection("Acme-Supermarket")("social_media_rules");
         
-        val query = MongoDBObject("_type" -> "ProductRule", "increaseRate" -> MongoDBObject( "$le" -> increaseRate));
+        val query = MongoDBObject("_type" -> "ProductRule", "increaseRate" -> MongoDBObject( "$lte" -> increaseRate));
         val fields = MongoDBObject("_id" -> 1);
         val productRules = mongoProductRuleColl.find(query, fields);
         
@@ -198,27 +204,51 @@ object TwitterScrapper {
         mongoProductRuleConnection.underlying.close();
         mongoProductRuleColl = null;
       });
-      
-      productStatuses.foreachRDD( productRDD => {
-        productRDD.foreach(product => {
-          val mongoProductDataConnection = MongoClient();
-          var mongoProductDataColl = mongoProductDataConnection("Acme-Supermarket")("social_media_product_data");
-          
-          val productOcurrence = MongoDBObject(
-              "date" -> new Date(),
-              "description" -> product._1,
-              "product_id" -> p_id
-          );
-          
-          mongoProductDataColl += productOcurrence;
-          
-          mongoProductDataConnection.underlying.close();
-          mongoProductDataColl = null;
-          
-          log("Ocurrencia de producto", "INFO");
-        })
-      })
     }
+    
+    statuses.foreachRDD( statusRDD => {
+      statusRDD.foreach( status => {
+        var stopWords = new StopWords();
+        //println(status._1);
+        
+        val mongoProductConnection = MongoClient();
+        var mongoProductColl = mongoProductConnection("Acme-Supermarket")("products");
+        
+        val mongoProductDataConnection = MongoClient();
+        var mongoProductDataColl = mongoProductDataConnection("Acme-Supermarket")("social_media_product_data");
+        
+        //Por cada producto, mirar si el tweet contiene al nombre del mismo y, en caso afirmativo, 
+        //meter una entrada en la tabla SocialMediaProductData con el texto y la fecha del tweet y la ID del producto        
+        val query = MongoDBObject.empty;
+        val fields = MongoDBObject("_id" -> 1, "name" -> 1);
+        val products = mongoProductColl.find(query, fields);
+                
+        products.foreach { product => {
+          val p_id = product.get("_id");
+          val p_name = product.get("name").toString().toLowerCase().replaceAll("[~!@#$^%&*\\(\\)_+={}\\[\\]|;:\"'<,>.?`/\\\\-]", "");
+          
+          if(status._1.toLowerCase().matches(".*\\b" + p_name + "\\b.*")) {
+            val productOcurrence = MongoDBObject(
+              "date" -> new Date(),
+              "description" -> status._1,
+              "product_id" -> p_id
+            );
+            
+            mongoProductDataColl += productOcurrence;
+            log("Ocurrencia de producto", "INFO");
+          }
+        }}
+        
+        //Clean-up
+        mongoProductConnection.underlying.close();
+        mongoProductColl = null;
+        
+        mongoProductDataConnection.underlying.close();
+        mongoProductDataColl = null;
+        
+        stopWords = null;
+      });
+    });
     
     sys.addShutdownHook({
       println("ShutdownHook called")
