@@ -50,8 +50,11 @@ object TwitterScrapper {
     var tweets = TwitterUtils.createStream(ssc, None)
     var statuses = tweets.map { status => (status.getText, status.getCreatedAt, status.getLang) }
     statuses = statuses.filter { status => status._3 == "es" || status._3 == "en" }
-     
-    val brandStatuses = statuses.filter { status =>  status._1.toLowerCase().contains(config.getString("app.brand-name")) || status._1.toLowerCase().contains(config.getString("app.product-name"))}
+    
+    val brandName = config.getString("app.brand-name").replaceAll("[~!@#$^%&*\\(\\)_+={}\\[\\]|;:\"'<,>.?`/\\\\-]", "").toLowerCase();
+    val productName = config.getString("app.product-name").replaceAll("[~!@#$^%&*\\(\\)_+={}\\[\\]|;:\"'<,>.?`/\\\\-]", "").toLowerCase();
+    
+    val brandStatuses = statuses.filter { status =>  status._1.toLowerCase().matches("\\b" + brandName + "\\b") || status._1.toLowerCase().matches("\\b" + productName + "\\b") }
     
     var brandSum = 0L
     var brandCount = 0.0
